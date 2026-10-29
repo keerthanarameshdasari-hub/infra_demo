@@ -1,0 +1,29 @@
+# Dependabot version updates.
+# Note: GitHub reads this file from the DEFAULT branch (main). It only takes effect
+# once it has been promoted dev -> test -> main.
+# Only GitHub Actions is configured: this repo has no package.json, Dockerfile,
+# build.gradle or Gemfile yet, and Dependabot fails on an ecosystem whose files don't
+# exist. Add npm, docker, gradle, bundler (or terraform) when those files appear.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    # Wait a few days after a release before proposing it, so a compromised
+    # or broken release has time to be noticed and yanked.
+    cooldown:
+      default-days: 7
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "chore(ci)"
