@@ -1,0 +1,131 @@
+# CI and security checks
+
+This page explains what runs automatically on this repository and why. You don't need to
+run any of it yourself; it all happens on GitHub when you open a pull request.
+
+## How code moves
+
+```
+feature/* ──PR──▶ dev ──PR──▶ test ──PR──▶ main
+```
+
+Every arrow is a pull request, and every pull request into `dev`, `test` or `main` runs the
+**Security** workflow (`.github/workflows/security.yml`). It also runs:
+
+- on every push to `dev` (i.e. after a PR merges), so `dev` itself is scanned and the Security
+  tab reflects what is actually on the branch;
+- every Monday morning, so new problems in code that hasn't changed still get noticed (a
+  vulnerability can be discovered in a package years after we added it).
+
+It never runs on `pull_request_target`, and it needs no secrets.
+
+A pull request can only merge when all of its required checks are green. PRs into `dev` and
+`test` need nothing more, so you can merge your own. PRs into `main` also need an approval from
+the other maintainer (see "Who reviews what").
+
+## The jobs
+
+### Secret scan (gitleaks)
+
+Looks through **every commit in the history** for things that look like passwords, API keys
+and tokens.
+
+*Why:* once a secret is pushed to GitHub, deleting it in a later commit doesn't help. It is
+still in the history and anyone who clones the repo can find it. This job catches it in
+the PR, before it reaches a shared branch.
+
+*If it fails:* the log shows the file and commit (the secret itself is redacted). Revoke the
+secret with whoever issued it first, then remove it from your branch's history.
+
+### Dependency review
+
+Compares the dependencies in your PR with those on the branch you're merging into. It fails if
+your PR **adds** a package that has a **high or critical** known vulnerability, or a package
+licensed under **GPL or AGPL**.
+
+*Why:* most of the code we ship is other people's. A vulnerable package is an easy way in for
+an attacker, and GPL/AGPL licences can oblige us to publish our own source code.
+
+*If it fails:* upgrade to a fixed version, or pick a different package. It only runs on pull
+requests, so it shows as "skipped" on pushes to `dev` and the weekly run, which is expected.
+
+### CodeQL (actions)
+
+GitHub's code analyser. Here it reads our **workflow files** and looks for things like untrusted
+input reaching a shell script, or a job with more permissions than it uses.
+
+*Why:* these are the bugs reviewers miss most often, because the dangerous path can run across
+several steps or files.
+
+*If it fails:* open the **Security → Code scanning** tab for the explanation and a suggested fix.
+
+**A later step must add more languages.** This repo has no application code yet, so only
+`actions` is analysed. When code is added, add its language to the list in `security.yml`:
+`javascript-typescript` for JS/TS (e.g. CDK or Pulumi scripts), `python` for Python,
+`java-kotlin` for `android/`, `swift` for `ios/` (needs a macOS runner). Each new language is a
+new check, `CodeQL (<language>)`, which must also be added to the rulesets. Terraform and other
+config files are not a CodeQL language; when we pick an IaC tool, a scanner for it (such as
+Trivy or Checkov) will be a separate job.
+
+### Workflow audit (zizmor)
+
+Checks our GitHub Actions workflow files for security mistakes: overly broad permissions,
+unpinned third-party actions, untrusted input injected into shell scripts, and so on.
+
+*Why:* CI has access to the code and often to deployment credentials. A badly written
+workflow is one of the easiest ways to compromise a repository.
+
+### Workflow lint (actionlint)
+
+Checks workflow files for plain mistakes: YAML errors, typos in keys, wrong expression syntax,
+and bugs in the shell scripts inside `run:` steps.
+
+*Why:* without it, a typo in a workflow only shows up when the workflow runs, or quietly
+makes a job do nothing.
+
+## Rules we follow in workflows
+
+- **Permissions start at nothing.** The workflow sets `permissions: {}` and each job asks only
+  for what it needs (usually just read access to the code).
+- **Third-party actions are pinned to a commit SHA**, with the version in a comment, e.g.
+  `actions/checkout@3d3c42e…  # v7.0.1`. A tag like `v7` can be moved to point at different
+  code; a SHA cannot.
+- **Downloaded tools are checksum-verified** before they run.
+- **No `pull_request_target`.** It runs PR code with write access, which is the classic way
+  CI gets hijacked.
+- **Never put `${{ github.event.* }}` inside a `run:` script.** Things like PR titles and branch
+  names are typed by whoever opens the PR, and putting them straight into a script lets them
+  run commands. Pass them through `env:` instead.
+- **No secrets are needed** for these checks.
+
+## Keeping things up to date
+
+Dependabot (`.github/dependabot.yml`) opens a pull request into `dev` every Monday for
+outdated GitHub Actions. Minor and patch updates are grouped into one PR, so there's less
+noise. It only covers GitHub Actions for now, because the repo has no other dependency files;
+add npm, docker, gradle, bundler or terraform to it when those files appear. Those PRs go
+through the same checks as everyone else's.
+
+## Who reviews what
+
+`.github/CODEOWNERS` makes @keerthanarameshdasari-hub and @Keerthana-212 the code owners for
+CI config (`.github/`), infrastructure (`infra/`), Dockerfiles and `package-lock.json`. Every PR
+into `main` needs an approval from one of them other than its author, and from a code owner when
+it touches those paths. Lines for `android/` and `ios/` are ready but commented out until those
+folders exist.
+
+## Required checks
+
+These are the check names to require in both branch rulesets, `dev-test` (for `dev` and `test`)
+and `main-strict` (for `main`):
+
+| Check name | Job |
+|---|---|
+| `Secret scan (gitleaks)` | gitleaks |
+| `Dependency review` | dependency-review |
+| `CodeQL (actions)` | codeql |
+| `Workflow audit (zizmor)` | zizmor |
+| `Workflow lint (actionlint)` | actionlint |
+
+If you rename a job or add a CodeQL language, update the rulesets too. A required check whose
+name no longer exists never reports, and PRs wait on it forever.
