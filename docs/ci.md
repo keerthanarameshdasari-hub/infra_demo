@@ -108,11 +108,23 @@ through the same checks as everyone else's.
 
 ## Who reviews what
 
-`.github/CODEOWNERS` makes @keerthanarameshdasari-hub and @Keerthana-212 the code owners for
-CI config (`.github/`), infrastructure (`infra/`), Dockerfiles and `package-lock.json`. Every PR
-into `main` needs an approval from one of them other than its author, and from a code owner when
-it touches those paths. Lines for `android/` and `ios/` are ready but commented out until those
-folders exist.
+`.github/CODEOWNERS` makes @keerthanarameshdasari-hub and @Keerthana-212 the code owners of
+every file, with explicit lines for CI config (`.github/`), infrastructure (`infra/`),
+Dockerfiles and `package-lock.json`. Lines for `android/` and `ios/` are ready but commented
+out until those folders exist.
+
+Because every file has owners, GitHub automatically asks the other maintainer to review each
+pull request; it shows up in their GitHub notifications (and email, if they have it on). What
+that review means depends on where the PR is going:
+
+- **Into `dev` or `test`** (`dev-test` ruleset): the review is optional. Once the checks are
+  green you can merge your own PR.
+- **Into `main`** (`main-strict` ruleset): one approval from a code owner other than the PR's
+  author is required. If new commits are pushed after the approval, it is dismissed and the
+  PR needs approving again. Nobody, admins included, can bypass this.
+
+To review, open the PR, go to **Files changed → Review changes**, pick **Approve** or
+**Request changes**, and submit.
 
 ## Required checks
 
